@@ -3,12 +3,21 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+// Create logger to log our actioins with date and time to console
+var logger = log.New(os.Stdout, "ACTION: ", log.Ldate|log.Ltime)
+
+// Log our actions with message
+func logAction(message string) {
+	logger.Printf("[%s] %s", time.Now().Format("2006-01-02 15:04:05.000"), message)
+}
 
 // Buffer size
 const MybufferSize int = 10
@@ -26,6 +35,7 @@ type MyBuffer struct {
 
 // Initializing a new buffer of integers
 func bufferInitialization(size int) *MyBuffer {
+	logAction("Initializing a new buffer of integers")
 	return &MyBuffer{
 		mu:       sync.Mutex{},
 		array:    make([]int, size),
@@ -64,6 +74,7 @@ func (b *MyBuffer) Get() []int {
 // This function reads values from the console
 // Write "exit" if you want to finish the work with pipeline
 func reading(inputChan chan<- int, done <-chan struct{}) {
+	logAction("The programm is ready to read from Stdin")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -72,6 +83,10 @@ func reading(inputChan chan<- int, done <-chan struct{}) {
 		}
 		if strings.EqualFold(line, "exit") {
 			fmt.Println("The program has completed its work")
+			logAction("The first filter has finished its work")
+			logAction("The second filter has finished its work")
+			logAction("The programm finished reading Stdin")
+			logAction("The pipeline has shut down")
 			os.Exit(0)
 		}
 		values := strings.Fields(line)
@@ -79,12 +94,14 @@ func reading(inputChan chan<- int, done <-chan struct{}) {
 			num, err := strconv.Atoi(val)
 			if err != nil {
 				fmt.Printf("Invalid number: %s (You can only use integers)\n", val)
+				logAction("The user entered incorrect data")
 				continue
 			}
 			select {
 			case <-done:
 				return
 			case inputChan <- num:
+				logAction("the number was successfully read")
 			}
 		}
 	}
@@ -96,6 +113,7 @@ func reading(inputChan chan<- int, done <-chan struct{}) {
 
 // This filter stage excludes numbers less than 0
 func filterStage1(done <-chan struct{}, input <-chan int) <-chan int {
+	logAction("The first filter has started its work")
 	withoutNegativeChan := make(chan int)
 	go func() {
 		defer close(withoutNegativeChan)
@@ -107,12 +125,16 @@ func filterStage1(done <-chan struct{}, input <-chan int) <-chan int {
 				if !ok {
 					return
 				}
+				logAction("the number went to the first stage of filtering")
 				if x >= 0 {
 					select {
 					case <-done:
 						return
 					case withoutNegativeChan <- x:
+						logAction("The number has passed the first filter stage")
 					}
+				} else {
+					logAction("The number hasn't passed the first filter stage")
 				}
 			}
 		}
@@ -122,6 +144,7 @@ func filterStage1(done <-chan struct{}, input <-chan int) <-chan int {
 
 // This filter stage excludes 0 and numbers not divisible by 3
 func filterStage2(done <-chan struct{}, input <-chan int) <-chan int {
+	logAction("The second filter has started its work")
 	outputChan := make(chan int)
 	go func() {
 		defer close(outputChan)
@@ -133,12 +156,16 @@ func filterStage2(done <-chan struct{}, input <-chan int) <-chan int {
 				if !ok {
 					return
 				}
+				logAction("the number went to the second stage of filtering")
 				if x > 0 && x%3 == 0 {
 					select {
 					case <-done:
 						return
 					case outputChan <- x:
+						logAction("The number has passed the second filter stage")
 					}
+				} else {
+					logAction("The number hasn't passed the second filter stage")
 				}
 			}
 		}
@@ -151,6 +178,8 @@ func writeToBuffer(input <-chan int, b *MyBuffer) {
 	for num := range input {
 		b.Push(num)
 		fmt.Printf("Data received: %d\n", num)
+		logAction("The number was passed all filter stages")
+		logAction("The number was recorded in the buffer")
 	}
 }
 
@@ -164,12 +193,16 @@ func writeToConsole(done <-chan struct{}, b *MyBuffer, ticker *time.Ticker) {
 			data := b.Get()
 			if data != nil {
 				fmt.Println("processed data:", data)
-
+				logAction("The data from the buffer is printed to the console")
+				logAction("The buffer has been cleared")
 			}
 		}
 	}
 }
+
+// !!! The end of work with the pipeline is carried out only by the "exit" command
 func main() {
+	logAction("The pipeline has started working ")
 	done := make(chan struct{})
 	defer close(done)
 	buffer := bufferInitialization(MybufferSize)

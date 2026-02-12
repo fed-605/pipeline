@@ -25,7 +25,7 @@ const MybufferSize int = 10
 // buffer cleaning interval
 const cleaningInterval = 30 * time.Second
 
-// MyBuffer - ring buffer of integers
+// A ring buffer of integers
 type MyBuffer struct {
 	mu       sync.Mutex
 	array    []int
@@ -33,9 +33,9 @@ type MyBuffer struct {
 	size     int
 }
 
-// Initializing a new buffer of integers
-func bufferInitialization(size int) *MyBuffer {
-	logAction("Initializing a new buffer of integers")
+// create a new buffer
+func NewBuffer(size int) *MyBuffer {
+	logAction("Create a new buffer of integers")
 	return &MyBuffer{
 		mu:       sync.Mutex{},
 		array:    make([]int, size),
@@ -44,7 +44,7 @@ func bufferInitialization(size int) *MyBuffer {
 	}
 }
 
-// Push the elements in buffer
+// push the elements in buffer
 func (b *MyBuffer) Push(el int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -59,7 +59,7 @@ func (b *MyBuffer) Push(el int) {
 	}
 }
 
-// Get elemensts from buffer and than cleans it up
+// get elemensts from buffer and than cleans it up
 func (b *MyBuffer) Get() []int {
 	if b.position < 0 {
 		return nil
@@ -71,11 +71,12 @@ func (b *MyBuffer) Get() []int {
 	return output
 }
 
-// This function reads values from the console
-// Write "exit" if you want to finish the work with pipeline
-func reading(inputChan chan<- int, done <-chan struct{}) {
+// this function reads values from the console
+// write "exit" if you want to finish the work with pipeline
+func reading(inputChan chan<- int, done chan struct{}) {
 	logAction("The programm is ready to read from Stdin")
 	scanner := bufio.NewScanner(os.Stdin)
+	defer close(inputChan)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -87,7 +88,8 @@ func reading(inputChan chan<- int, done <-chan struct{}) {
 			logAction("The second filter has finished its work")
 			logAction("The programm finished reading Stdin")
 			logAction("The pipeline has shut down")
-			os.Exit(0)
+			close(done)
+			return
 		}
 		values := strings.Fields(line)
 		for _, val := range values {
@@ -108,10 +110,10 @@ func reading(inputChan chan<- int, done <-chan struct{}) {
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error reading input:", err)
 	}
-	close(inputChan)
+	close(done)
 }
 
-// This filter stage excludes numbers less than 0
+// this filter stage excludes numbers less than 0
 func filterStage1(done <-chan struct{}, input <-chan int) <-chan int {
 	logAction("The first filter has started its work")
 	withoutNegativeChan := make(chan int)
@@ -142,7 +144,7 @@ func filterStage1(done <-chan struct{}, input <-chan int) <-chan int {
 	return withoutNegativeChan
 }
 
-// This filter stage excludes 0 and numbers not divisible by 3
+// this filter stage excludes 0 and numbers not divisible by 3
 func filterStage2(done <-chan struct{}, input <-chan int) <-chan int {
 	logAction("The second filter has started its work")
 	outputChan := make(chan int)
@@ -204,8 +206,7 @@ func writeToConsole(done <-chan struct{}, b *MyBuffer, ticker *time.Ticker) {
 func main() {
 	logAction("The pipeline has started working ")
 	done := make(chan struct{})
-	defer close(done)
-	buffer := bufferInitialization(MybufferSize)
+	buffer := NewBuffer(MybufferSize)
 	input := make(chan int)
 	go reading(input, done)
 	pipeline := filterStage2(done, filterStage1(done, input))
